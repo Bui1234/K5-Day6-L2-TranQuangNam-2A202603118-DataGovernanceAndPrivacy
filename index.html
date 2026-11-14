@@ -328,6 +328,67 @@
       gap: 6px;
     }
 
+    .phase-timeline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 14px;
+      margin-block-start: 14px;
+    }
+
+    .phase-card {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-inline-start: 4px solid var(--accent-color);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .phase-card.done {
+      border-inline-start-color: var(--success);
+    }
+
+    .phase-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .phase-header h4 {
+      margin: 0;
+      font-size: 0.96rem;
+    }
+
+    .phase-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.83rem;
+    }
+
+    .phase-step.checked {
+      opacity: 0.78;
+      border-color: var(--success);
+    }
+
+    .role-pill {
+      display: inline-block;
+      font-weight: 700;
+      font-size: 0.73rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
     /* Responsive table following modern-web-guidance responsive-table pattern */
     .table-wrapper {
       overflow: auto;
@@ -539,6 +600,28 @@
           </div>
 
           <div class="grid-4" id="membersGrid"></div>
+
+          <div class="box" style="margin-block-end: 16px;">
+            <h3>
+              <span>Quy tắc tách File để 4 người Commit độc lập (Không bị Merge Conflict trên Git)</span>
+              <span class="badge easy">Git Isolation Rule</span>
+            </h3>
+            <p style="margin: 4px 0 8px; font-size: 0.86rem; color: var(--muted);">
+              Vì <code>src/pipeline.py</code> là file chung, để cả 4 người có thể <code>git commit</code> &amp; <code>git push</code> song song mà không đè code của nhau, nhóm tách theo file riêng như sau:
+            </p>
+            <div class="grid-4" style="margin-block-end: 0;" id="fileIsolationGrid"></div>
+          </div>
+
+          <div class="box">
+            <h3>
+              <span id="phasesTitleHeading">Chi Tiết Thứ Tự 4 Chặng Làm Việc Cho Nhóm 4 Người (Phút 00 → 180+)</span>
+              <span class="badge" id="phasesOverallBadge">Hoàn thành: 0 / 16 bước</span>
+            </h3>
+            <p style="margin: 4px 0 6px; font-size: 0.86rem; color: var(--muted);">
+              Đánh dấu vào từng bước khi hoàn thành — tiến độ được lưu tự động và đính kèm khi bấm <b>Copy Link Chia Sẻ Nhóm</b>.
+            </p>
+            <div class="phase-timeline" id="phasesTimelineContainer"></div>
+          </div>
         </div>
       </div>
 
@@ -720,6 +803,7 @@ git shortlog -sne --all</code></pre>
       trackId: "t14",
       reviewerName: "",
       members: JSON.parse(JSON.stringify(DEFAULT_MEMBERS)),
+      phaseChecks: {},
       queue: JSON.parse(JSON.stringify(INITIAL_QUEUE))
     };
 
@@ -738,6 +822,7 @@ git shortlog -sne --all</code></pre>
           trackId: state.trackId,
           reviewerName: state.reviewerName,
           members: state.members,
+          phaseChecks: state.phaseChecks,
           decisions: state.queue.map(r => ({
             item_id: r.item_id,
             reviewer: r.reviewer,
@@ -760,7 +845,10 @@ git shortlog -sne --all</code></pre>
           if (Array.isArray(shared.members) && shared.members.length === 4) {
             state.members = shared.members;
           }
-          showToast("Đã nạp cấu hình nhóm từ link chia sẻ!");
+          if (shared.phaseChecks && typeof shared.phaseChecks === "object") {
+            state.phaseChecks = shared.phaseChecks;
+          }
+          showToast("Đã nạp cấu hình & tiến độ nhóm từ link chia sẻ!");
         } else {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
@@ -770,6 +858,9 @@ git shortlog -sne --all</code></pre>
             if (parsed.reviewerName) state.reviewerName = parsed.reviewerName;
             if (Array.isArray(parsed.members) && parsed.members.length === 4) {
               state.members = parsed.members;
+            }
+            if (parsed.phaseChecks && typeof parsed.phaseChecks === "object") {
+              state.phaseChecks = parsed.phaseChecks;
             }
             if (Array.isArray(parsed.decisions)) {
               const map = Object.fromEntries(parsed.decisions.map(d => [d.item_id, d]));
@@ -901,6 +992,8 @@ git shortlog -sne --all</code></pre>
         });
       });
 
+      renderPhasesAndIsolation(track);
+
       document.getElementById("contractCommandsBlock").textContent =
 `# Chạy Baseline & PoC cho ${track.code}
 python -m src.main --input ${track.input} --config configs/lab.yaml --output out/poc --offline --seed 42
@@ -911,6 +1004,170 @@ pytest -q
 
 # Kiểm tra lịch sử commit của 4 thành viên khớp với reports/team_contributions.csv
 git shortlog -sne --all`;
+    }
+
+    function getPhasesForTrack(track) {
+      if (track.id === "t14") {
+        return [
+          {
+            id: "p1",
+            title: "Chặng 1 (Phút 00 – 30): Khởi động & Chốt giao thức",
+            mode: "4 người làm song song",
+            steps: [
+              { id: "p1_s1", who: "Người 1", text: "Push index.html lên GitHub, sửa configs/lab.yaml (track: t14, group_id, owner), viết load(ctx) đọc images.csv, taxonomy.yaml, model_card_fixture.yaml, model_predictions_fixture.csv -> Commit #1 của Người 1." },
+              { id: "p1_s2", who: "Người 4", text: "Bấm 'Tải reports/metric_contract.md' ở trên, kiểm tra công thức Detection F1@IoU0.5 & slices rồi commit vào reports/metric_contract.md -> Commit #1 của Người 4." },
+              { id: "p1_s3", who: "Người 2", text: "Viết hàm ánh xạ class_id (0->pedestrian, 2->car, 3->motorbike, 11->sign) và cắt tọa độ bbox nằm gọn trong 320x180 (Invalid-label rate = 0)." },
+              { id: "p1_s4", who: "Người 3", text: "Thu thập Họ tên + Git Email của 4 thành viên điền vào bảng trên, thiết kế ngưỡng quyết định GO / HOLD / REWORK cho hàm decide()." }
+            ]
+          },
+          {
+            id: "p2",
+            title: "Chặng 2 (Phút 30 – 90): Xây dựng Baseline, PoC & Unit Tests",
+            mode: "4 người làm song song",
+            steps: [
+              { id: "p2_s1", who: "Người 1", text: "Cài đặt src/baseline_t14.py (lọc conf >= 0.25 cố định, không qua review) + tạo nhãn chuẩn nội bộ (Internal GT) cho 20 ảnh eval -> Commit #2 của Người 1." },
+              { id: "p2_s2", who: "Người 2", text: "Hoàn thiện process() & rank() trong src/t14_processor.py: lọc conf theo từng class (giữ box nhỏ <150px² cho sign/motorbike), chấm score ưu tiên 30 box chồng lấn/nhỏ/conf biên -> Commit #1 & #2 của Người 2." },
+              { id: "p2_s3", who: "Người 3", text: "Hoàn thiện review() & decide() trong src/t14_reviewer.py: đọc review_queue_reviewed.csv, xóa box bị reject, đổi class/box được edit và ghi audit_log.jsonl -> Commit #1 của Người 3." },
+              { id: "p2_s4", who: "Người 4", text: "Viết tests/test_t14_pipeline.py (ít nhất 2 test: 1 test đúng schema/taxonomy + 1 test bắt lỗi box tràn biên / sai class), chạy pytest -q đạt 0 failed -> Commit #2 của Người 4." }
+            ]
+          },
+          {
+            id: "p3",
+            title: "Chặng 3 (Phút 90 – 130): Cùng duyệt 30 Box trên Web (Human-in-the-Loop)",
+            mode: "Phối hợp cả 4 người trên Tab 2",
+            steps: [
+              { id: "p3_s1", who: "Người 1 & 2", text: "Mở Tab 2 trên trang này: Người 1 lọc 'Người 1 (Rank 1–8)' duyệt 8 ảnh; Người 2 lọc 'Người 2 (Rank 9–15)' duyệt 7 ảnh -> bấm Export CSV gửi cho Người 3." },
+              { id: "p3_s2", who: "Người 3 & 4", text: "Mở Tab 2: Người 3 lọc 'Người 3 (Rank 16–23)' duyệt 8 ảnh; Người 4 lọc 'Người 4 (Rank 24–30)' duyệt 7 ảnh -> bấm Export CSV gửi cho Người 3." },
+              { id: "p3_s3", who: "Người 3", text: "Bấm nút 'Gộp (Merge) CSV từ các thành viên' trên Tab 2 -> chọn 4 file CSV -> bấm Export review_queue_reviewed.csv (đủ 30/30 quyết định)." },
+              { id: "p3_s4", who: "Người 3", text: "Lưu file vào out/poc/review_queue_reviewed.csv, chạy lại make run TRACK=t14 để sinh out/poc/predictions.csv và out/poc/audit_log.jsonl -> Commit #2 của Người 3." }
+            ]
+          },
+          {
+            id: "p4",
+            title: "Chặng 4 (Phút 130 – 180): Chốt số liệu, Báo cáo & Kiểm tra Git",
+            mode: "Tổng hợp & Nộp bài",
+            steps: [
+              { id: "p4_s1", who: "Người 1 & 4", text: "Chạy src.evaluate và src.compare trên tập nhãn nội bộ để lấy bảng so sánh Baseline vs. PoC (trước & sau review) -> reports/table1_baseline_vs_poc.md." },
+              { id: "p4_s2", who: "Người 3 & 4", text: "Điền đầy đủ reports/group_report.md: dán bảng metric, chụp 2 failure cases của T14, thảo luận license AGPL-3.0 (YOLO26) vs Apache-2.0 (RF-DETR)." },
+              { id: "p4_s3", who: "Người 1", text: "Chạy git shortlog -sne --all lấy đúng SHA commit của 4 người, điền vào bảng trên và bấm 'Tải reports/team_contributions.csv'." },
+              { id: "p4_s4", who: "Cả nhóm", text: "Chạy kiểm tra cuối cùng (make preflight && make test) đảm bảo 0 failed, gắn tag (make tag-demo / make tag-final) và git push --tags." }
+            ]
+          }
+        ];
+      }
+      return [
+        {
+          id: "p1",
+          title: "Chặng 1 (Phút 00 – 30): Khởi động & Chốt giao thức",
+          mode: "4 người làm song song",
+          steps: [
+            { id: "p1_s1", who: "Người 1", text: `Sửa configs/lab.yaml (track: ${track.id}, input: ${track.input}), viết load(ctx) kiểm tra manifest.csv & đọc dữ liệu -> Commit #1 của Người 1.` },
+            { id: "p1_s2", who: "Người 4", text: `Bấm 'Tải reports/metric_contract.md', kiểm tra công thức (${track.primary_metric}) & slices rồi commit -> Commit #1 của Người 4.` },
+            { id: "p1_s3", who: "Người 2", text: `Khảo sát dữ liệu dev trong ${track.input} và thiết kế hàm xử lý cho bẫy: ${track.trap}` },
+            { id: "p1_s4", who: "Người 3", text: "Điền Họ tên + Git Email của 4 thành viên vào bảng trên, chốt ngưỡng quyết định GO / HOLD / REWORK cho decide()." }
+          ]
+        },
+        {
+          id: "p2",
+          title: "Chặng 2 (Phút 30 – 90): Xây dựng Baseline, PoC & Unit Tests",
+          mode: "4 người làm song song",
+          steps: [
+            { id: "p2_s1", who: "Người 1", text: `Cài đặt src/baseline_${track.id}.py + tạo tập nhãn kiểm tra nội bộ (Internal GT) để nhóm tự chấm điểm -> Commit #2 của Người 1.` },
+            { id: "p2_s2", who: "Người 2", text: `Cài đặt process() & rank() trong src/${track.id}_processor.py sinh bảng có đủ cột (${track.pred_cols}) + cột score -> Commit #1 & #2 của Người 2.` },
+            { id: "p2_s3", who: "Người 3", text: `Cài đặt review() & decide() trong src/${track.id}_reviewer.py: đọc review_queue_reviewed.csv, áp dụng override và ghi audit_log.jsonl -> Commit #1 của Người 3.` },
+            { id: "p2_s4", who: "Người 4", text: `Viết tests/test_${track.id}_pipeline.py (>= 2 unit tests: 1 success + 1 failure/edge case), chạy pytest -q đạt 0 failed -> Commit #2 của Người 4.` }
+          ]
+        },
+        {
+          id: "p3",
+          title: "Chặng 3 (Phút 90 – 130): Duyệt mẫu Human-in-the-Loop & Nối dây E2E",
+          mode: "Phối hợp cả 4 người",
+          steps: [
+            { id: "p3_s1", who: "Người 1 & 2", text: "Chạy thử pipeline sinh review_queue.csv top-B; Người 1 và Người 2 duyệt nửa đầu danh sách mẫu nghi ngờ." },
+            { id: "p3_s2", who: "Người 3 & 4", text: "Người 3 và Người 4 duyệt nửa sau danh sách mẫu nghi ngờ (approve / reject / edit)." },
+            { id: "p3_s3", who: "Người 3", text: "Gộp kết quả duyệt của 4 người vào out/poc/review_queue_reviewed.csv (đảm bảo có tên reviewer)." },
+            { id: "p3_s4", who: "Người 3", text: `Chạy lại make run TRACK=${track.id} để xuất out/poc/${track.pred_file} và out/poc/audit_log.jsonl -> Commit #2 của Người 3.` }
+          ]
+        },
+        {
+          id: "p4",
+          title: "Chặng 4 (Phút 130 – 180): Chốt số liệu, Báo cáo & Kiểm tra Git",
+          mode: "Tổng hợp & Nộp bài",
+          steps: [
+            { id: "p4_s1", who: "Người 1 & 4", text: "Chạy src.evaluate và src.compare trên tập nhãn nội bộ lấy bảng Baseline vs. PoC -> reports/table1_baseline_vs_poc.md." },
+            { id: "p4_s2", who: "Người 3 & 4", text: "Hoàn thiện reports/group_report.md: dán bảng metric, phân tích 2 failure cases và giới hạn đạo đức/pháp lý." },
+            { id: "p4_s3", who: "Người 1", text: "Chạy git shortlog -sne --all lấy SHA commit của 4 người, cập nhật reports/team_contributions.csv." },
+            { id: "p4_s4", who: "Cả nhóm", text: "Chạy make preflight && make test (0 failed), gắn tag (make tag-demo / make tag-final) và push lên GitHub." }
+          ]
+        }
+      ];
+    }
+
+    function renderPhasesAndIsolation(track) {
+      const isoGrid = document.getElementById("fileIsolationGrid");
+      const isolationItems = [
+        { who: "Người 1 (Lead / Data)", files: `configs/lab.yaml, src/baseline_${track.id}.py, hàm load() trong src/pipeline.py` },
+        { who: "Người 2 (Core Algorithm)", files: `src/${track.id}_processor.py (chứa logic process, rank, exporter) gọi vào src/pipeline.py` },
+        { who: "Người 3 (Review & Gate)", files: `src/${track.id}_reviewer.py (chứa logic review, decide) + out/poc/review_queue_reviewed.csv` },
+        { who: "Người 4 (QA & Report)", files: `reports/metric_contract.md, tests/test_${track.id}_pipeline.py, reports/group_report.md, reports/team_contributions.csv` }
+      ];
+      isoGrid.innerHTML = isolationItems.map(item => `
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 0.82rem;">
+          <b>${item.who}</b><br>
+          <span style="color: var(--muted);">Sở hữu file:</span> <code>${item.files}</code>
+        </div>
+      `).join("");
+
+      const phases = getPhasesForTrack(track);
+      const container = document.getElementById("phasesTimelineContainer");
+      container.innerHTML = "";
+
+      let totalSteps = 0;
+      let doneSteps = 0;
+
+      phases.forEach(p => {
+        const pDone = p.steps.filter(s => state.phaseChecks[s.id]).length;
+        totalSteps += p.steps.length;
+        doneSteps += pDone;
+
+        const card = document.createElement("div");
+        card.className = "phase-card" + (pDone === p.steps.length ? " done" : "");
+
+        const stepsHtml = p.steps.map(s => {
+          const isChecked = !!state.phaseChecks[s.id];
+          return `
+            <label class="phase-step ${isChecked ? 'checked' : ''}" style="font-weight: 400; cursor: pointer;">
+              <input type="checkbox" data-phase-step="${s.id}" ${isChecked ? "checked" : ""} style="margin-block-start: 3px;">
+              <div>
+                <span class="role-pill">${s.who}</span>
+                <span>${s.text}</span>
+              </div>
+            </label>
+          `;
+        }).join("");
+
+        card.innerHTML = `
+          <div class="phase-header">
+            <div>
+              <h4>${p.title}</h4>
+              <span style="font-size: 0.78rem; color: var(--muted);">${p.mode}</span>
+            </div>
+            <span class="badge ${pDone === p.steps.length ? 'easy' : ''}">${pDone} / ${p.steps.length}</span>
+          </div>
+          <div class="field-stack">${stepsHtml}</div>
+        `;
+        container.appendChild(card);
+      });
+
+      document.getElementById("phasesOverallBadge").textContent = `Hoàn thành: ${doneSteps} / ${totalSteps} bước`;
+
+      container.querySelectorAll("input[data-phase-step]").forEach(chk => {
+        chk.addEventListener("change", e => {
+          state.phaseChecks[e.target.dataset.phaseStep] = e.target.checked;
+          saveState();
+          renderPhasesAndIsolation(track);
+        });
+      });
     }
 
     function renderReviewCards() {
@@ -1163,11 +1420,12 @@ git shortlog -sne --all`;
         const payload = btoa(unescape(encodeURIComponent(JSON.stringify({
           groupId: state.groupId,
           trackId: state.trackId,
-          members: state.members
+          members: state.members,
+          phaseChecks: state.phaseChecks
         }))));
         const url = location.origin + location.pathname + "#team=" + payload;
         navigator.clipboard.writeText(url).then(() => {
-          showToast("Đã copy link chia sẻ nhóm vào Clipboard!");
+          showToast("Đã copy link chia sẻ nhóm & tiến độ 4 chặng vào Clipboard!");
         }).catch(() => {
           location.hash = "team=" + payload;
           showToast("Đã cập nhật link trên thanh địa chỉ!");
