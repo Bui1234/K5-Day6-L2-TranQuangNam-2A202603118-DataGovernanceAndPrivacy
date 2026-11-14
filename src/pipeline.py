@@ -85,7 +85,7 @@ def process(ctx: RunContext, data: dict) -> pd.DataFrame:
         try:
             from . import t14_processor
             return t14_processor.process(ctx, data)
-        except ModuleNotFoundError:
+        except ImportError:
             pass
     spec = get_track(ctx.track)
     raise NotImplementedError(
@@ -102,7 +102,7 @@ def rank(ctx: RunContext, scored: pd.DataFrame) -> pd.DataFrame:
             from . import t14_processor
             if hasattr(t14_processor, "rank"):
                 return t14_processor.rank(ctx, scored)
-        except ModuleNotFoundError:
+        except ImportError:
             pass
     budget = int(ctx.param("budget", 20))
     if "score" not in scored.columns:
@@ -122,7 +122,7 @@ def review(ctx: RunContext, scored: pd.DataFrame, queue: pd.DataFrame) -> pd.Dat
             from . import t14_reviewer
             if hasattr(t14_reviewer, "review"):
                 return t14_reviewer.review(ctx, scored, queue)
-        except ModuleNotFoundError:
+        except ImportError:
             pass
     reviewed_path = ctx.output_dir / "review_queue_reviewed.csv"
     if reviewed_path.exists():
@@ -138,7 +138,7 @@ def decide(ctx: RunContext, final: pd.DataFrame) -> Decision:
             from . import t14_reviewer
             if hasattr(t14_reviewer, "decide"):
                 return t14_reviewer.decide(ctx, final)
-        except ModuleNotFoundError:
+        except ImportError:
             pass
     return Decision(status="HOLD", reason_code="POLICY_NOT_IMPLEMENTED", reason="Decision policy not implemented yet",
                     owner=ctx.config.get("owner", "TODO-owner"), scope=ctx.track)
@@ -151,5 +151,9 @@ def run(ctx: RunContext) -> None:
     ctx.stats["n_items"] = len(scored)
     queue = rank(ctx, scored)
     final = review(ctx, scored, queue)
+    if ctx.track == "t14":
+        from . import t14_processor
+        final = t14_processor.finalize(ctx, final)   # keep==True only + block invalid labels
+        t14_processor.export_all(ctx, final)         # out/<run>/export/: YOLO + COCO + qa_report.json
     final[spec.pred_columns + [c for c in final.columns if c not in spec.pred_columns]].to_csv(ctx.out(spec.pred_file), index=False)
     write_decision(decide(ctx, final), ctx.out("decision.json"), ctx.out("decision_log.csv"))
