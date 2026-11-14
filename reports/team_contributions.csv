@@ -1,6 +1,6 @@
 member,git_author_name,git_email,role,modules_files,commit_shas,evidence_note,presenter
 Member 1,,,Lead / Integrator,src/main.py; configs/,,,
 Member 2,,,Data & fixtures,fixtures/; tools/,,,
-Member 3,,,Core algorithm,src/pipeline.py,,,
+Member 3,Bui Dung,148409997+Bui1234@users.noreply.github.com,Human-in-the-Loop & Decision Gate,"src/t14_reviewer.py; out/poc/review_queue_reviewed.csv",,"GitHub: https://github.com/Bui1234; Assigned scope: review decisions, overrides, audit log and GO/HOLD/REWORK",no
 Member 4,,,QA / metric,tests/; reports/metrics_*.json,,,
 Member 5,,,Human review + report,reports/group_report.md; demo/,,,
